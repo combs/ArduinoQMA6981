@@ -159,9 +159,13 @@ typedef enum
     QMA6981_BW           = 0x10,
     QMA6981_POWER_MODE   = 0x11,
     QMA6981_STEP_CONF    = 0x13,
-    QMA6981_INT_EN       = 0x16,
+    QMA6981_INT_EN1      = 0x16,
+    QMA6981_INT_EN2      = 0x17,
     QMA6981_INT_SRC      = 0x18,
-    QMA6981_INT_MAP      = 0x19,
+    QMA6981_INT_MAP0     = 0x19,
+    QMA6981_INT_MAP1     = 0x1a,
+    QMA6981_INT_MAP2     = 0x1b,
+    QMA6981_INT_MAP3     = 0x1c,
     QMA6981_INT_PIN_CONF = 0x20,
     QMA6981_INT_LATCH    = 0x21,
     QMA6981_LowG_HighG   = 0x22,
@@ -181,22 +185,23 @@ typedef enum
  * Function prototypes
  *==========================================================================*/
 
-class QMA6981 : {
+class QMA6981 {
     public:
         QMA6981();
-        bool setup(uint8_t address = QMA6981_ADDR);
+        bool begin(uint8_t address = QMA6981_ADDR);
         uint8_t writeRegister(QMA6981_reg_addr addr, uint8_t data);
         uint8_t readRegister(QMA6981_reg_addr addr, uint8_t len, uint8_t* data);
         int16_t convertTwosComplement10bit(uint16_t in);
-        accel_t poll(accel_t* currentAccel);
-        accel_t poll();
-        enableInterrupts(uint8_t interrupt_pin, QMA6981_INT_EN_VAL interrupt_value);
-        setInterruptType(uint8_t interrupt_pin, bool openDrain, bool logicTrueValue);
+        accel_t* poll(accel_t* currentAccel);
+        accel_t* poll();
+        bool enableInterrupts(uint8_t interrupt_pin, QMA6981_INT_EN_VAL interrupt_value);
+        bool setInterruptType(QMA6981_INT_PIN_CONF_VAL configuration);
+
     private:
         uint8_t _address = QMA6981_ADDR;
         QMA6981_INT_EN_VAL interrupt1;
-        QMA6981_INT_EN_VAL interrupt2;        
+        QMA6981_INT_EN_VAL interrupt2;
 
-}
+};
 
 #endif /* QMA6981_H_ */

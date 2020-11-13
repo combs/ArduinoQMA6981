@@ -36,8 +36,6 @@ accel_t lastKnownAccel = {0};
 
 void QMA6981() 
 {
-    interrupt1.value = 0;
-    interrupt2.value = 0;
 }
 /**
  * @brief Write a single byte of data to the given QMA6981 register
@@ -48,7 +46,7 @@ void QMA6981()
  */
 uint8_t QMA6981::writeRegister(QMA6981_reg_addr addr, uint8_t data)
 {
-    Wire.beginTransmission(QMA6981_ADDR);
+    Wire.beginTransmission(_address);
     uint8_t writeCmd[2] = {addr, data};
     Wire.write(writeCmd, sizeof(writeCmd));
     return Wire.endTransmission();
@@ -64,11 +62,11 @@ uint8_t QMA6981::writeRegister(QMA6981_reg_addr addr, uint8_t data)
  */
 uint8_t QMA6981::readRegister(QMA6981_reg_addr addr, uint8_t len, uint8_t* data)
 {
-    Wire.beginTransmission(QMA6981_ADDR);
+    Wire.beginTransmission(_address);
     uint8_t reg[1] = {addr};
     Wire.write(reg, sizeof(reg));
     Wire.endTransmission();
-    Wire.requestFrom(QMA6981_ADDR, len);
+    Wire.requestFrom(_address, len);
 
     uint8_t i = 0;
     while(Wire.available())    // slave may send less than requested
@@ -88,8 +86,10 @@ bool QMA6981::begin(uint8_t address)
 {
     _address = address;
 
+    interrupt1.val = 0;
+    interrupt2.val = 0;
     uint8_t chip_id;
-    if(0 != readRegister(QMA6981_CHIP_ID, 1, chip_id)) {
+    if(0 != readRegister(QMA6981_CHIP_ID, 1, &chip_id)) {
         // read failure;
         return false;
     }
@@ -98,13 +98,12 @@ bool QMA6981::begin(uint8_t address)
         return false;
     }
 
-    QMA6981_POWER_VAL active =
-    {
-        .bitmask.MODE_BIT = true,
-        .bitmask.res = true,
-        .bitmask.SLEEP_DUR = SLEEP_DUR_FULL_SPEED,
-        .bitmask.PRESET = Tpreset_12us
-    };
+    QMA6981_POWER_VAL active;
+    active.val = 0;
+    active.bitmask.MODE_BIT = true;
+    active.bitmask.res = true;
+    active.bitmask.SLEEP_DUR = SLEEP_DUR_FULL_SPEED;
+    active.bitmask.PRESET = Tpreset_12us;
     if(0 != writeRegister(QMA6981_POWER_MODE, active.val))
     {
         return false;
@@ -120,11 +119,11 @@ bool QMA6981::begin(uint8_t address)
     }
     delayMicroseconds(5);
 
-    QMA6981_BW_VAL bandwidth =
-    {
-        .bitmask.ODRH = false,
-        .bitmask.BW = QMA6981_BW_31_2
-    };
+    QMA6981_BW_VAL bandwidth;
+    bandwidth.val = 0;
+    bandwidth.bitmask.ODRH = false;
+    bandwidth.bitmask.BW = QMA6981_BW_31_2;
+
     if(0 != writeRegister(QMA6981_BW, bandwidth.val))
     {
         return false;
@@ -148,7 +147,7 @@ bool QMA6981::begin(uint8_t address)
  *
  * @param currentAccel A pointer where the acceleration data will be stored
  */
-void QMA6981::poll(accel_t* currentAccel)
+accel_t* QMA6981::poll(accel_t* currentAccel)
 {
     // Read 7 bytes of data(0x00)
     uint8_t raw_data[6];
@@ -156,7 +155,7 @@ void QMA6981::poll(accel_t* currentAccel)
     {
         // os_printf("read xyz error!!!\n");
         // Try reinitializing, then return last known value
-        QMA6981_setup();
+        begin();
     }
     else
     {
@@ -173,47 +172,47 @@ void QMA6981::poll(accel_t* currentAccel)
     return currentAccel;
 }
 
-void QMA6981::poll()
+accel_t* QMA6981::poll()
 {
     accel_t currentAccel;
-    return poll(currentAccel);
+    return poll(&currentAccel);
 }
 
-bool QMA6981::enableIinterrupts(uint8_t interrupt_pin, QMA6981_INT_EN_VAL interrupt_value)
+bool QMA6981::enableInterrupts(uint8_t interrupt_pin, QMA6981_INT_EN_VAL interrupt_value)
 {
     if (interrupt_pin == 1) {
-        interrupt1.value = interrupt_value.value;
+        interrupt1.val = interrupt_value.val;
 
-        if(0 != writeRegister(QMA6981_INT_MAP + 1, interrupt_value.value >> 8))
+        if(0 != writeRegister(QMA6981_INT_MAP1, interrupt_value.val >> 8))
         {
             return false;
         }
-        if(0 != writeRegister(QMA6981_INT_MAP, combined & 255))
+        if(0 != writeRegister(QMA6981_INT_MAP0, interrupt_value.val & 255))
         {
             return false;
         }
     } else if (interrupt_pin == 2)
     {
-        interrupt2.value = interrupt_value.value;
+        interrupt2.val = interrupt_value.val;
 
-        if(0 != writeRegister(QMA6981_INT_MAP + 3, interrupt_value.value >> 8))
+        if(0 != writeRegister(QMA6981_INT_MAP3, interrupt_value.val >> 8))
         {
             return false;
         }
-        if(0 != writeRegister(QMA6981_INT_MAP + 2, combined & 255))
+        if(0 != writeRegister(QMA6981_INT_MAP2, interrupt_value.val & 255))
         {
             return false;
         }
     } 
     
 
-    uint16_t combined = interrupt1.value | interrupt2.value; 
+    uint16_t combined = interrupt1.val | interrupt2.val; 
 
-    if(0 != writeRegister(QMA6981_INT_EN + 1, combined >> 8))
+    if(0 != writeRegister(QMA6981_INT_EN2, combined >> 8))
     {
         return false;
     }
-    if(0 != writeRegister(QMA6981_INT_EN, combined & 255))
+    if(0 != writeRegister(QMA6981_INT_EN1, combined & 255))
     {
         return false;
     } 
@@ -222,7 +221,7 @@ bool QMA6981::enableIinterrupts(uint8_t interrupt_pin, QMA6981_INT_EN_VAL interr
 
 bool QMA6981::setInterruptType(QMA6981_INT_PIN_CONF_VAL configuration)
 {
-    if (0 != writeRegister(QMA6981_INT_PIN_CONF, configuration.value))
+    if (0 != writeRegister(QMA6981_INT_PIN_CONF, configuration.val))
     {
         return false;
     }
